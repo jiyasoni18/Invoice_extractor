@@ -10,4 +10,3 @@ fastapi
 uvicorn
 python-multipart
 PyMuPDF
-beautifulsoup4
