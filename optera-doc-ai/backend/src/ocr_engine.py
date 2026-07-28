@@ -12,8 +12,9 @@ class OCREngine:
         if cls._instance is None:
             logger.info("Initializing PaddleOCR Engine with Angle Classifier enabled...")
             cls._instance = super(OCREngine, cls).__new__(cls)
-            # Re-enabling use_angle_cls=True to automatically rotate 90/180/270 degree images
-            cls._instance.ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
+            # Enabling use_angle_cls=True to automatically rotate 90/180/270 degree images
+            # Explicitly requesting PP-OCRv5 model architecture for superior handwriting recognition
+            cls._instance.ocr = PaddleOCR(use_angle_cls=True, lang='en', ocr_version='PP-OCRv5', show_log=False)
         return cls._instance
 
     def extract_text(self, image_path: str) -> str:
