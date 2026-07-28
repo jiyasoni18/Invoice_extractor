@@ -12,13 +12,14 @@ def parse_invoice(ocr_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     Extract the supplier_name, invoice_no, date, customer_name, vehicle_no, items (name, quantity, unit_price, tax_amount, amount), subtotal, tax_amount, and total.
     
     CRITICAL INSTRUCTIONS for field mapping:
-    - SUPPLIER_NAME: This is usually the largest printed text at the very top of the page (e.g., a store or company name).
+    - GENERAL: The OCR text is severely corrupted and may contain random symbols or mashed characters. You MUST aggressively infer the real words. For example, "SHIIV SHAKI! Tजायगन MगoRS" should be corrected to "SHIV SHAKTI MOTORS". Never return null if there is a highly probable match.
+    - SUPPLIER_NAME: This is usually the largest printed text at the very top of the page (e.g., a store or company name). Aggressively fix typos.
     - CUSTOMER_NAME: This is usually next to labels like "NAME:", "M/s", or "CUSTOMER:". Do NOT confuse the Customer with the Supplier.
     - INVOICE_NO: This is usually a number near "INVOICE NO:" or printed alone in a top corner. Do NOT confuse the invoice number with the Total Amount!
     - VEHICLE_NO: Look for "Vehicle Reg", "Vehicle No", etc.
-    - ITEMS: Look for grid-like data. IMPORTANT: Item descriptions often span MULTIPLE lines. If you see orphan words on the lines immediately below an item, COMBINE them into a single item name! Extract the unit price, item tax/GST, and final item amount.
-    - SUBTOTAL: The total before taxes are applied.
-    - TAX_AMOUNT: The total GST, CGST, SGST, or tax applied to the whole invoice.
+    - ITEMS: Look for grid-like data. The OCR might have mashed an entire table into a single long string of text! You MUST aggressively reconstruct the individual items from the numbers (e.g. quantity, rate, amount) hidden in the text. Split the items logically.
+    - TAXABLE_VALUE: The base amount before taxes are applied (often called "Taxable Value" or "Subtotal").
+    - TAX BREAKDOWN: Extract the exact CGST, SGST, and IGST amounts from the bottom of the invoice or the tax summary table.
     - TOTAL: Look near the bottom for "Total", "Balance", or the final summed amount (subtotal + tax).
     
     Return strictly as a JSON object matching this schema:
@@ -31,6 +32,10 @@ def parse_invoice(ocr_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
       "vehicle_no": "string",
       "items": [{"name": "string", "quantity": number, "unit_price": number, "tax_amount": number, "amount": number}],
       "subtotal": number,
+      "taxable_value": number,
+      "cgst": number,
+      "sgst": number,
+      "igst": number,
       "tax_amount": number,
       "total": number
     }
@@ -48,8 +53,13 @@ def parse_handwritten_log(ocr_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]
     Extract the date and all work entries (vehicle identifier and work description).
     
     CRITICAL INSTRUCTIONS for field mapping:
-    - VEHICLE: This is usually the first alphanumeric code on a row (e.g., TAM23, MAM38, TCM47). If the OCR severely misspelled it (e.g., "Amos", "ripmss"), infer the likely vehicle code based on the context. 
-    - WORK: The description of the maintenance. IMPORTANT: The input text you receive is formatted as a JSON array of rows (`[{"row": 1, "text": "..."}, ...]`). Work descriptions often span MULTIPLE rows! If you see a row that doesn't start with a clear vehicle code (e.g., "change", "to stcering pump pipe"), it is a CONTINUATION of the work description from the previous row. COMBINE these orphan rows into the previous vehicle's work description.
+    - VEHICLE: The OCR for cursive text is often severely corrupted. The valid vehicle code format in this fleet is ALWAYS three letters followed by two digits (e.g., TAM23, MAM38, TCM47). 
+      IMPORTANT: The vehicle code is SOMETIMES preceded by a serial number or bullet point like "(03)", "1)", "(7)", "44)", "09)", etc. 
+      If there is a serial number, extract the alphanumeric code immediately following it. If there is NO serial number (e.g. the very first row), extract the alphanumeric code itself as the VEHICLE.
+      If the OCR severely misspelled the vehicle code, you MUST aggressively correct it to the nearest valid fleet format (3 letters + 2 digits) based on phonetic or visual similarities.
+      Do NOT skip the first vehicle just because it lacks a serial number!
+      
+    - WORK: Reconstruct the work description logically using automotive terms (e.g. "wheel brake set", "coolant hose", "steering pipe"). If you see a row that doesn't start with a clear vehicle code (or a serial number + vehicle code), it is a CONTINUATION of the work description from the previous row. COMBINE these orphan rows into the previous vehicle's work description. Do NOT group all rows into a single vehicle! Each time you see a new vehicle code (with or without a serial number), start a new entry in the entries array.
     
     Return strictly as a JSON object matching this schema:
     {

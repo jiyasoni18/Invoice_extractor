@@ -10,9 +10,11 @@ env/
 
 # Output / Logs / Data
 backend/output/
-backend/input/
+backend/output_baseline/
 backend/logs/
 backend/.paddleocr/
+backend/inference_results/
+test_venv/
 
 # Node / Frontend
 node_modules/
@@ -34,3 +36,5 @@ yarn-error.log
 
 # Docker
 .docker/
+test_venv
+input/

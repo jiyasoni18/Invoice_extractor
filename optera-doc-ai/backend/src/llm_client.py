@@ -105,7 +105,7 @@ def call_gemini_vision(image_path: str, system_prompt: str) -> Tuple[str, Dict[s
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable not set.")
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     with open(image_path, "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')

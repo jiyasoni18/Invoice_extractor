@@ -14,7 +14,9 @@ def classify_document(ocr_text: str) -> tuple[str, dict]:
     - invoice (contains vendor, items, total, gst, etc.)
     - mechanic_log (handwritten notes about vehicles, oil changes, mechanic work)
     - meter_reading (dashboard or machine reading showing litres, urea, price)
-    - non_document (if the text is random or doesn't match the above)
+    - non_document (ONLY use this if the text is completely random garbage, an empty wall, or a picture of a random object with no business text)
+    
+    CRITICAL: The OCR text is often heavily mangled, garbled, or mashed together. Do NOT classify as 'non_document' just because the text looks messy. If you see ANY numbers, amounts, dates, or business words, classify it as an invoice or mechanic_log.
     
     Respond strictly in JSON format matching this schema:
     {
@@ -31,6 +33,6 @@ def classify_document(ocr_text: str) -> tuple[str, dict]:
         return classification.document_type, stats
     except Exception as e:
         logger.error(f"Error classifying document: {e}")
-        # Default to unknown/non_document if classification fails
-        return "non_document", {}
+        # Default to invoice if classification fails (much safer than rejecting valid documents)
+        return "invoice", {}
 

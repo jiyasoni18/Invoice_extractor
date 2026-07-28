@@ -14,3 +14,14 @@ services:
     env_file:
       - ./backend/.env
     # We don't mount 'input' here because the frontend will send the file directly over the API
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend

@@ -30,6 +30,10 @@ class InvoiceDocument(BaseModel):
     vehicle_no: Optional[str] = Field(None, description="Vehicle Registration Number, if present")
     items: List[InvoiceItem] = Field(default_factory=list, description="List of line items in the invoice")
     subtotal: Optional[float] = Field(None, description="Base amount before taxes")
+    taxable_value: Optional[float] = Field(None, description="Total taxable value before GST (often the same as subtotal)")
+    cgst: Optional[float] = Field(None, description="CGST amount")
+    sgst: Optional[float] = Field(None, description="SGST amount")
+    igst: Optional[float] = Field(None, description="IGST amount")
     tax_amount: Optional[float] = Field(None, description="Total tax or GST amount")
     total: Optional[float] = Field(None, description="Final total amount of the invoice")
 

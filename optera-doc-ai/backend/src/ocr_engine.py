@@ -2,6 +2,7 @@ import logging
 import json
 import re
 from paddleocr import PaddleOCR
+import statistics
 
 logger = logging.getLogger(__name__)
 
@@ -10,60 +11,37 @@ class OCREngine:
 
     def __new__(cls):
         if cls._instance is None:
-            logger.info("Initializing PaddleOCR Engine with Angle Classifier enabled...")
+            logger.info("Initializing PaddleOCR Engine and PPStructure...")
             cls._instance = super(OCREngine, cls).__new__(cls)
-            # Enabling use_angle_cls=True to automatically rotate 90/180/270 degree images
-            # Explicitly requesting PP-OCRv5 model architecture for superior handwriting recognition
-            cls._instance.ocr = PaddleOCR(use_angle_cls=True, lang='en', ocr_version='PP-OCRv5', show_log=False)
+            cls._instance.ocr = PaddleOCR(use_angle_cls=True, lang='en')
+            
+            from paddleocr import PPStructure
+            cls._instance.table_engine = PPStructure(layout=True, table=True, ocr=True, recovery=False, lang='en')
+            
         return cls._instance
 
     def extract_text(self, image_path: str) -> str:
         """
-        Runs OCR on the given image path and returns the full extracted text as a single string.
+        Runs PPStructure on the given image path and returns the full extracted text.
+        Tables are natively returned as HTML `<table>` blocks to perfectly preserve column structure.
         """
-        result = self.ocr.ocr(image_path, cls=True)
-        if not result or not result[0]:
+        result_basic = self.ocr.ocr(image_path)
+        if not result_basic or not result_basic[0]:
             return ""
             
-        # Detect if the image is sideways (landscape text)
-        # If height > width for most text boxes, the image is rotated 90 or 270 degrees.
-        vertical_count = 0
-        horizontal_count = 0
-        for line in result[0]:
-            box = line[0]
-            w = max([p[0] for p in box]) - min([p[0] for p in box])
-            h = max([p[1] for p in box]) - min([p[1] for p in box])
-            
-            # Stricter bounds to prevent false positives on single handwritten letters
-            if h > w * 2.5:
-                vertical_count += 1
-            elif w > h * 1.5:
-                horizontal_count += 1
+        # Now run PPStructure to extract layout and tables natively
+        result_structure = self.table_engine(image_path)
+        tables_html = []
+        for region in result_structure:
+            if region['type'] == 'table':
+                tables_html.append(region['res']['html'])
                 
-        # Only rotate if overwhelmingly vertical
-        if vertical_count > horizontal_count * 3:
-            logger.info("Image appears to be sideways! Rotating 90 degrees and re-running OCR...")
-            import cv2
-            img = cv2.imread(image_path)
-            # Rotate 90 degrees clockwise
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-            cv2.imwrite(image_path, img)
-            # Re-run OCR on the newly rotated image
-            result = self.ocr.ocr(image_path, cls=True)
-            if not result or not result[0]:
-                return ""
-            
-        # result[0] is a list of [box, (text, confidence)]
-        # box is a list of 4 points: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-        # We need to sort and group them into lines to preserve table structures.
-        
-        # Calculate bounding box centers and heights
+        # Now run our manual bounding-box clustering for the ENTIRE document.
+        # This perfectly handles borderless receipts and messy columns that PPStructure misses.
         blocks = []
-        for line in result[0]:
+        for line in result_basic[0]:
             box = line[0]
             text = line[1][0]
-            
-            # Get center y and center x
             y_coords = [point[1] for point in box]
             x_coords = [point[0] for point in box]
             center_y = sum(y_coords) / 4.0
@@ -77,20 +55,19 @@ class OCREngine:
                 "height": height
             })
             
-        # Sort blocks by Y coordinate first
         blocks.sort(key=lambda b: b["center_y"])
+        
+        # Calculate median height to make row clustering completely immune to outliers (like tall watermarks)
+        median_height = statistics.median([b["height"] for b in blocks]) if blocks else 20.0
         
         lines = []
         current_line = []
-        
         for block in blocks:
             if not current_line:
                 current_line.append(block)
             else:
-                # If the center_y of this block is within half the height of the previous block, 
-                # they are on the same line.
                 prev_block = current_line[-1]
-                if abs(block["center_y"] - prev_block["center_y"]) < (prev_block["height"] * 0.5):
+                if abs(block["center_y"] - prev_block["center_y"]) < (median_height * 0.5):
                     current_line.append(block)
                 else:
                     lines.append(current_line)
@@ -99,34 +76,26 @@ class OCREngine:
         if current_line:
             lines.append(current_line)
             
-        # Step 4: Fuzzy correct the first word of each line and Step 5: Format as JSON array
-        json_rows = []
-        for i, line in enumerate(lines):
+        text_rows = []
+        for line in lines:
             line.sort(key=lambda b: b["center_x"])
+            row_text = "\t".join([b["text"] for b in line])
+            if row_text.strip():
+                text_rows.append(row_text)
+                
+        full_text = "\n".join(text_rows)
+        
+        # Combine the perfectly clustered raw text with the PPStructure HTML tables
+        if tables_html:
+            full_text += "\n\n[DETECTED HTML TABLES]\n" + "\n".join([f"<table>\n{t}\n</table>" for t in tables_html])
             
-            # Fuzzy correct the first word (likely the vehicle code)
-            if line:
-                first_word = line[0]["text"]
-                # Match 2-4 letters followed by 2-3 characters that might be numbers or misread letters
-                match = re.match(r'^([A-Za-z]{2,4})([0-9A-Za-z]{2,3})$', first_word)
-                if match:
-                    prefix, suffix = match.groups()
-                    prefix = prefix.upper()
-                    # Replace common OCR letter-to-number mistakes
-                    suffix = suffix.upper().replace('S', '5').replace('O', '0').replace('L', '1').replace('I', '1')
-                    line[0]["text"] = prefix + suffix
-                    
-            # Join with spaces (JSON structure replaces the need for tabs/newlines)
-            row_text = " ".join([b["text"] for b in line])
-            json_rows.append({"row": i + 1, "text": row_text})
-            
-        return json.dumps(json_rows, indent=2)
+        return full_text
 
     def extract_raw(self, image_path: str) -> list:
         """
         Runs OCR and returns the raw result (useful if bounding boxes or confidences are needed).
         """
-        return self.ocr.ocr(image_path, cls=True)
+        return self.ocr.ocr(image_path)
 
     def extract_text_from_rows(self, row_images: list) -> str:
         """
@@ -135,7 +104,7 @@ class OCREngine:
         """
         row_texts = []
         for row_img in row_images:
-            result = self.ocr.ocr(row_img, cls=True)
+            result = self.ocr.ocr(row_img)
             if not result or not result[0]:
                 continue
             

@@ -95,7 +95,7 @@ function App() {
               <input 
                 id="file-input"
                 type="file" 
-                accept="image/*" 
+                accept="image/*,.pdf" 
                 onChange={handleFileChange} 
                 hidden 
               />
@@ -107,8 +107,8 @@ function App() {
               ) : (
                 <div className="upload-prompt">
                   <span className="upload-icon">☁️</span>
-                  <p>Drag & drop an image here or click to browse</p>
-                  <small>Supports: Invoices, Mechanic Logs, Meters</small>
+                  <p>Drag & drop an image or PDF here or click to browse</p>
+                  <small>Supports: Invoices, Mechanic Logs, Meters, PDFs</small>
                 </div>
               )}
             </div>

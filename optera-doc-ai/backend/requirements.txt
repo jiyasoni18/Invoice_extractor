@@ -1,5 +1,5 @@
 paddlepaddle>=2.6.2
-paddleocr>=2.9.0
+paddleocr==2.8.1
 opencv-python-headless
 pydantic
 requests
@@ -9,3 +9,4 @@ Pillow
 fastapi
 uvicorn
 python-multipart
+PyMuPDF

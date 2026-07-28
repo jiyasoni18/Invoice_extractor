@@ -61,12 +61,26 @@ def process_image(image_path: str, output_dir: str, cost_logger: CostLogger, upd
             
         # --- OPTIMIZED PATH (OCR + LLM) ---
         # 1. Preprocess
-        prep_image_path = preprocess_image(image_path, os.path.join(output_dir, f"prep_{base_name}"))
-        _add_stage("Preprocessing", "success", "Image resized and grayscaled.")
-        
-        # 2. OCR (Single pass for everything)
+        is_pdf = image_path.lower().endswith('.pdf')
+        ocr_text = ""
         ocr_engine = get_ocr_engine()
-        ocr_text = ocr_engine.extract_text(prep_image_path)
+        
+        if is_pdf:
+            from src.pdf_handler import render_pdf_to_images
+            _add_stage("Scanned PDF Processing", "success", "Detected scanned PDF. Converting to images.")
+            img_paths = render_pdf_to_images(image_path, output_dir)
+            texts = []
+            for i, img_p in enumerate(img_paths):
+                # Preprocess each rendered page (resizing to max 1600px to drastically speed up OCR)
+                prep_pdf_img = preprocess_image(img_p, os.path.join(output_dir, f"prep_{base_name}_page_{i}.jpg"))
+                texts.append(ocr_engine.extract_text(prep_pdf_img))
+            ocr_text = "\n\n".join(texts)
+        else:
+            prep_image_path = preprocess_image(image_path, os.path.join(output_dir, f"prep_{base_name}"))
+            _add_stage("Preprocessing", "success", "Image resized and grayscaled.")
+            
+            # 2. OCR (Single pass for everything)
+            ocr_text = ocr_engine.extract_text(prep_image_path)
         
         _add_stage("OCR Text Extraction", "success", f"Extracted {len(ocr_text)} characters using PaddleOCR.")
         
@@ -173,7 +187,7 @@ def main():
     cost_logger = CostLogger()
     
     for filename in os.listdir(input_dir):
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf')):
             image_path = os.path.join(input_dir, filename)
             logger.info(f"Processing {image_path}...")
             process_image(image_path, output_dir, cost_logger)

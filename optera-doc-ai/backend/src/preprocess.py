@@ -13,7 +13,13 @@ def preprocess_image(image_path: str, output_path: str) -> str:
     Returns the path to the preprocessed image.
     """
     try:
-        img = cv2.imread(image_path)
+        from PIL import Image, ImageOps
+        # Use PIL to read EXIF and auto-rotate the image to its intended orientation
+        pil_img = Image.open(image_path)
+        pil_img = ImageOps.exif_transpose(pil_img)
+        # Convert PIL Image back to OpenCV BGR format
+        img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        
         if img is None:
             logger.error(f"Failed to load image: {image_path}")
             return image_path
@@ -55,20 +61,13 @@ def preprocess_image(image_path: str, output_path: str) -> str:
                 # Re-compute grayscale after rotation
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 
-        # --- Step 1: Better Image Enhancement (Adaptive Thresholding) ---
-        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to boost faded ink and colored text contrast
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
         
-        enhanced = cv2.adaptiveThreshold(
-            gray,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY,
-            21,
-            15
-        )
-            
-        # Save processed binary image
-        cv2.imwrite(output_path, enhanced)
+        # Save processed grayscale image instead of binarizing it.
+        # PaddleOCR's deep learning model performs better on continuous pixel values than harsh binary thresholds which destroy cursive strokes.
+        cv2.imwrite(output_path, gray)
         return output_path
     except Exception as e:
         logger.error(f"Error in preprocessing {image_path}: {e}")
