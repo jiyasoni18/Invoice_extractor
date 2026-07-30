@@ -41,3 +41,4 @@ yarn-error.log
 .docker/
 test_venv
 input/
+.DS_Store
