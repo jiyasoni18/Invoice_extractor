@@ -9,7 +9,7 @@ from src.ocr_engine import get_ocr_engine
 from src.detector import is_document
 from src.router import classify_document
 from src.extractors.parsers import parse_invoice, parse_handwritten_log, parse_handwritten_log_vision, parse_meter_reading
-from src.llm_client import call_gemini_vision
+from src.llm_client import call_vision_model
 from src.schemas import RejectedDocument
 from src.cost_logger import CostLogger
 
@@ -45,7 +45,7 @@ def process_image(image_path: str, output_dir: str, cost_logger: CostLogger, upd
               "total": number
             }
             """
-            text_content, extract_stats = call_gemini_vision(image_path, system_prompt)
+            text_content, extract_stats = call_vision_model(image_path, system_prompt)
             result_json = json.loads(text_content)
             
             result_json["_debug_model_used"] = extract_stats.get("model_used", "gemini-1.5-flash-vision")
@@ -122,14 +122,33 @@ def process_image(image_path: str, output_dir: str, cost_logger: CostLogger, upd
             return {"stages": stages, "final_json": result}
             
         # 5. Extract
+        from src.extractors.parsers import parse_invoice, parse_handwritten_log_vision, parse_handwritten_invoice_vision, parse_meter_reading
+        
         result_json = {}
         extract_stats = {}
         if doc_type == "invoice":
             result_json, extract_stats = parse_invoice(ocr_text)
+            
+            # --- VISION FALLBACK SAFETY NET ---
+            # If the Text LLM fails to find any invoice structure, the OCR was likely too garbled (e.g., highly cursive or rotated).
+            # We redirect it to the Vision Model as a final safety net.
+            if not result_json.get("items") and result_json.get("total") is None and result_json.get("subtotal") is None:
+                logger.warning(f"[{base_name}] Text LLM returned empty invoice. OCR is likely garbled. Falling back to Vision Model!")
+                
+                from src.extractors.parsers import parse_vision_fallback
+                result_json, fallback_stats = parse_vision_fallback(image_path)
+                doc_type = result_json.get("document_type", "unknown")
+                    
+                # Merge stats so we track the cost of both the failed text attempt and the successful vision attempt
+                extract_stats["input_tokens"] = extract_stats.get("input_tokens", 0) + fallback_stats.get("input_tokens", 0)
+                extract_stats["output_tokens"] = extract_stats.get("output_tokens", 0) + fallback_stats.get("output_tokens", 0)
+                extract_stats["estimated_cost"] = extract_stats.get("estimated_cost", 0) + fallback_stats.get("estimated_cost", 0)
+                extract_stats["model_used"] = fallback_stats.get("model_used", "vision-fallback")
+        elif doc_type == "handwritten_invoice":
+            result_json, extract_stats = parse_handwritten_invoice_vision(image_path)
         elif doc_type == "mechanic_log":
-            # The user explicitly requested to stick with OCR + Text LLM for handwritten logs.
-            # We pass the OCR text to OpenRouter.
-            result_json, extract_stats = parse_handwritten_log(ocr_text)
+            # Switching to Vision model for mechanic logs to fix major OCR hallucination issues
+            result_json, extract_stats = parse_handwritten_log_vision(image_path)
         elif doc_type == "meter_reading":
             result_json, extract_stats = parse_meter_reading(ocr_text)
         else:

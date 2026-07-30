@@ -15,6 +15,9 @@ backend/logs/
 backend/.paddleocr/
 backend/inference_results/
 test_venv/
+*.csv
+*.json
+COST_COMPARISON.md
 
 # Node / Frontend
 node_modules/

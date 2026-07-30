@@ -7,6 +7,7 @@ function App() {
   const [taskId, setTaskId] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [mode, setMode] = useState('optimized');
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -32,7 +33,7 @@ function App() {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${apiUrl}/upload`, {
+      const res = await fetch(`${apiUrl}/upload?mode=${mode}`, {
         method: 'POST',
         body: formData,
       });
@@ -111,6 +112,17 @@ function App() {
                   <small>Supports: Invoices, Mechanic Logs, Meters, PDFs</small>
                 </div>
               )}
+            </div>
+
+            <div className="mode-toggle">
+              <label className={`mode-option ${mode === 'optimized' ? 'active' : ''}`}>
+                <input type="radio" name="mode" value="optimized" checked={mode === 'optimized'} onChange={() => setMode('optimized')} />
+                Optimized (Fast & Cheap)
+              </label>
+              <label className={`mode-option ${mode === 'baseline' ? 'active' : ''}`}>
+                <input type="radio" name="mode" value="baseline" checked={mode === 'baseline'} onChange={() => setMode('baseline')} />
+                Baseline (Vision Only)
+              </label>
             </div>
             
             <button 

@@ -4,7 +4,7 @@ import logging
 import json
 import time
 
-from src.llm_client import call_gemini_vision
+from src.llm_client import call_google_gemini_vision
 from src.cost_logger import CostLogger
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -24,7 +24,7 @@ def process_baseline(image_path: str, output_dir: str, cost_logger: CostLogger):
     """
     
     try:
-        text_content, extract_stats = call_gemini_vision(image_path, system_prompt)
+        text_content, extract_stats = call_google_gemini_vision(image_path, system_prompt, model_name="gemini-3-flash-preview")
         
         try:
             result_json = json.loads(text_content)

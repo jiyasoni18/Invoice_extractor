@@ -44,20 +44,21 @@ class OCREngine:
             text = line[1][0]
             y_coords = [point[1] for point in box]
             x_coords = [point[0] for point in box]
+            min_y, max_y = min(y_coords), max(y_coords)
+            min_x, max_x = min(x_coords), max(x_coords)
             center_y = sum(y_coords) / 4.0
-            center_x = sum(x_coords) / 4.0
-            height = max(y_coords) - min(y_coords)
+            height = max_y - min_y
             
             blocks.append({
                 "text": text,
                 "center_y": center_y,
-                "center_x": center_x,
+                "min_x": min_x,
+                "max_x": max_x,
                 "height": height
             })
             
         blocks.sort(key=lambda b: b["center_y"])
         
-        # Calculate median height to make row clustering completely immune to outliers (like tall watermarks)
         median_height = statistics.median([b["height"] for b in blocks]) if blocks else 20.0
         
         lines = []
@@ -67,6 +68,7 @@ class OCREngine:
                 current_line.append(block)
             else:
                 prev_block = current_line[-1]
+                # If it's within half a line's height, it's the same line
                 if abs(block["center_y"] - prev_block["center_y"]) < (median_height * 0.5):
                     current_line.append(block)
                 else:
@@ -77,11 +79,27 @@ class OCREngine:
             lines.append(current_line)
             
         text_rows = []
+        # Estimate average character width to convert pixel distance to spaces
+        # Assuming ~10 pixels per character as a rough estimate
+        char_width_px = 12.0
+        
         for line in lines:
-            line.sort(key=lambda b: b["center_x"])
-            row_text = "\t".join([b["text"] for b in line])
-            if row_text.strip():
-                text_rows.append(row_text)
+            line.sort(key=lambda b: b["min_x"])
+            row_str = ""
+            last_x = 0
+            for b in line:
+                if last_x > 0:
+                    # Calculate gap in pixels between the end of the last word and the start of this one
+                    gap_px = b["min_x"] - last_x
+                    spaces_to_add = max(1, int(gap_px / char_width_px))
+                    # Cap massive spaces to avoid breaking LLM context with huge empty gaps
+                    spaces_to_add = min(spaces_to_add, 15)
+                    row_str += " " * spaces_to_add
+                row_str += b["text"]
+                last_x = b["max_x"]
+                
+            if row_str.strip():
+                text_rows.append(row_str)
                 
         full_text = "\n".join(text_rows)
         

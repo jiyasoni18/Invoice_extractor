@@ -16,9 +16,11 @@ class RejectedDocument(BaseModel):
 
 class InvoiceItem(BaseModel):
     name: Optional[str] = Field(None, description="Name of the product or service")
+    hsn_code: Optional[str] = Field(None, description="HSN or SAC code for GST classification")
     quantity: Optional[float] = Field(None, description="Quantity of the item")
     unit_price: Optional[float] = Field(None, description="Price per single unit")
     tax_amount: Optional[float] = Field(None, description="Tax or GST amount for this item")
+    discount: Optional[float] = Field(None, description="Discount applied to this item")
     amount: Optional[float] = Field(None, description="Total amount for this item including tax")
 
 class InvoiceDocument(BaseModel):
@@ -26,7 +28,10 @@ class InvoiceDocument(BaseModel):
     supplier_name: Optional[str] = Field(None, description="Name of the supplier, vendor, or company issuing the invoice")
     invoice_no: Optional[str] = Field(None, description="Invoice number")
     date: Optional[str] = Field(None, description="Date of the invoice")
+    supplier_gstin: Optional[str] = Field(None, description="GSTIN of the supplier")
     customer_name: Optional[str] = Field(None, description="Name of the customer or purchasing company")
+    customer_gstin: Optional[str] = Field(None, description="GSTIN of the customer")
+    payment_mode: Optional[str] = Field(None, description="Mode of payment (e.g. CASH, CREDIT, UPI)")
     vehicle_no: Optional[str] = Field(None, description="Vehicle Registration Number, if present")
     items: List[InvoiceItem] = Field(default_factory=list, description="List of line items in the invoice")
     subtotal: Optional[float] = Field(None, description="Base amount before taxes")
@@ -66,4 +71,4 @@ class MeterReadingDocument(BaseModel):
 # ---------------------------------------------------------
 
 class DocumentTypeClassification(BaseModel):
-    document_type: str = Field(description="Must be one of: 'invoice', 'mechanic_log', 'meter_reading', 'non_document'")
+    document_type: str = Field(description="Must be one of: 'invoice', 'handwritten_invoice', 'mechanic_log', 'meter_reading', 'non_document'")

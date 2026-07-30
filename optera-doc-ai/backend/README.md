@@ -15,7 +15,8 @@ A cost-optimized, routing-based Document AI pipeline that converts raw images of
    docker run --rm -v $(pwd)/input:/app/input -v $(pwd)/output:/app/output -v $(pwd)/logs:/app/logs -e OPENROUTER_API_KEY=$OPENROUTER_API_KEY optera-doc-ai
    ```
 
-Outputs will be saved in `output/` as JSON files. Cost and timing statistics are appended to `logs/cost_log.csv`.
+Outputs will be saved in `output/` as JSON files. Cost and timing statistics are appended to `logs/cost_log.csv`. 
+For a detailed breakdown of the token/cost savings per document, see `../COST_COMPARISON.md`.
 
 ## Architecture
 - **Preprocessing**: OpenCV is used to normalize the image.
